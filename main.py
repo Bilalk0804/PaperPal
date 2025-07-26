@@ -1,88 +1,145 @@
-from dotenv import load_dotenv
-import os
-from langchain_ollama import OllamaLLM
-
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
-from langchain.chat_models import init_chat_model
-from langchain.agents import create_tool_calling_agent,AgentExecutor
-#from langchain_huggingface import HuggingFaceEndpoint
-from pydantic import BaseModel
-#from tools import search_tool,wiki_tool, save_tool
-load_dotenv()
-llm = init_chat_model("mistralai/mixtral-8x7b-instruct-v0.1", model_provider="Nvidia", api_key=os.getenv("NVIDIA_API_KEY"))
-
-'''Experimental code to use HuggingFaceEndpoint, currently not working due to custom tooling.'''
-# llm = HuggingFaceEndpoint(
-#     #repo_id="HuggingFaceH4/zephyr-7b-beta",
-#     temperature=0.5,
-#     huggingfacehub_api_token=os.getenv("HUGGINGFACE_API_KEY"),
-#     model='HuggingFaceH4/zephyr-7b-beta')
-'''Test run to check if the LLM is working correctly.'''
-# prompt="Tell me how is an agent different from a tool in the context of LLMs"
-# response = llm.invoke(prompt)
-# for chunk in llm.stream(prompt):
-#    print(chunk.content, end='')
-
-# prompt="I know you are a model but I still like you"
-# print(llm.invoke(prompt))
-
-"""Main model working is beggining from here we will be working with 2 models acutally embeddings and the LLM."""
-model=OllamaLLM(model="deepseek-r1:latest")
-
-template="""You are an AI assistant designed for answering queries using Retrieval-Augmented Generation (RAG). You will process user questions by first searching      
-through the provided documents (PDFs or emails) to retrieve relevant information, then generate a concise and accurate response based on that context.      
-If no matching content is found, state explicitly that you cannot answer from the documents and provide reasoning."  
-
----
-
-**User Prompt Format:**  
-```  
-Documents: [Insert list of PDF/emails here]  
-Query: {user_question}  
-```
-
----
-
-### **Example Workflow**  
-1. **Human Input (PDF):** "What is the company's revenue growth in 2023?"  
-   - System retrieves relevant data from all uploaded PDFs containing financial reports or summaries.  
-
-2. **Human Input (Email):** "I need to know the details of Project Alpha mentioned in this email."  
-   - System scans emails for keywords like "Project Alpha" and extracts key points.  
-
----
-
-### **Prompt Template**  
-```  
-## Role: RAG Assistant  
-- Task 1: Retrieve relevant passages from the provided documents (PDFs or emails) based on the user's query.  
-- Task 2: Use ONLY the retrieved context to answer accurately, citing sources if possible.  
-
-## Instructions:  
-{%- if documents -%}  
-If any documents are provided, search them for content directly related to the query and prioritize exact matches or summaries.  
-{%- else -%}  
-No documents are available—answer based on your training data only (if applicable) and explicitly state this limitation.  
-{%- endif %}  
-
-## Documents Provided:  
-{{#documents}}  
-### Document {{@index + 1}}:  
-{{this}}  
-{% if multi_doc == true then more formatting for list view %}  
-{%- endif %}  
-
-## Query:
-{{input}}
-
-## Response Format:
-Answer concisely. If multiple sources are relevant, summarize key points from each and cite by document title/section (if known). Example structure:
-
-**Answer:** [Your synthesized response here]
-**Sources:** [List relevant documents or sections in bullet points if needed.]
+#!/usr/bin/env python3
 """
-prompt = ChatPromptTemplate.from_template(template)
+Main entry point for the Intelligent Query-Retrieval System.
+This script provides a simple interface to the RAG system.
+"""
 
-chain = prompt | model
-print(chain.invoke({"question": "What is the capital of France?", "document_list": "Paris is the capital of France."}))
+import argparse
+import sys
+from pathlib import Path
+from rag_system import IntelligentQuerySystem
+
+def main():
+    """Main function to run the RAG system."""
+    parser = argparse.ArgumentParser(
+        description="Intelligent Query-Retrieval System",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py --demo                           # Run the demo
+  python main.py --query "What is the coverage limit?"  # Single query
+  python main.py --docs ./documents --query "..." # Process docs and query
+  python main.py --api                            # Start API server
+        """
+    )
+    
+    parser.add_argument(
+        "--demo", 
+        action="store_true",
+        help="Run the demonstration with sample documents"
+    )
+    
+    parser.add_argument(
+        "--docs", 
+        type=str,
+        help="Path to directory containing documents to process"
+    )
+    
+    parser.add_argument(
+        "--query", 
+        type=str,
+        help="Query to process"
+    )
+    
+    parser.add_argument(
+        "--api", 
+        action="store_true",
+        help="Start the API server"
+    )
+    
+    parser.add_argument(
+        "--test", 
+        action="store_true",
+        help="Run system tests"
+    )
+    
+    args = parser.parse_args()
+    
+    # If no arguments provided, show help
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return
+    
+    # Run tests
+    if args.test:
+        print("Running system tests...")
+        from test_system import main as run_tests
+        run_tests()
+        return
+    
+    # Start API server
+    if args.api:
+        print("Starting API server...")
+        from api_server import app
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+        return
+    
+    # Run demo
+    if args.demo:
+        print("Running demo...")
+        from demo import run_demo
+        run_demo()
+        return
+    
+    # Initialize the RAG system
+    print("Initializing Intelligent Query-Retrieval System...")
+    system = IntelligentQuerySystem()
+    
+    # Process documents if provided
+    if args.docs:
+        docs_path = Path(args.docs)
+        if not docs_path.exists():
+            print(f"Error: Directory {args.docs} does not exist")
+            return
+        
+        print(f"Processing documents from: {args.docs}")
+        system.add_documents(str(docs_path))
+        
+        # Show system stats
+        stats = system.get_system_stats()
+        print(f"System loaded with {stats['vector_store']['total_documents']} document chunks")
+    
+    # Process query if provided
+    if args.query:
+        print(f"\nProcessing query: {args.query}")
+        print("-" * 50)
+        
+        try:
+            response = system.query(args.query)
+            
+            print(f"Answer: {response.answer}")
+            print(f"Confidence: {response.confidence:.2f}")
+            print(f"Domain: {response.domain}")
+            print(f"Sources: {', '.join(response.sources)}")
+            print(f"Relevant Clauses: {', '.join(response.relevant_clauses)}")
+            print(f"Reasoning: {response.reasoning}")
+            
+        except Exception as e:
+            print(f"Error processing query: {e}")
+    
+    # If no query provided but docs were processed, start interactive mode
+    if args.docs and not args.query:
+        print("\nEntering interactive mode. Type 'quit' to exit.")
+        print("Enter your queries:")
+        
+        while True:
+            try:
+                query = input("\n> ").strip()
+                if query.lower() in ['quit', 'exit', 'q']:
+                    break
+                
+                if query:
+                    response = system.query(query)
+                    print(f"\nAnswer: {response.answer}")
+                    print(f"Confidence: {response.confidence:.2f}")
+                    print(f"Domain: {response.domain}")
+                    
+            except KeyboardInterrupt:
+                print("\nExiting...")
+                break
+            except Exception as e:
+                print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()
