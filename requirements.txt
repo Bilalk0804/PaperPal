@@ -9,3 +9,30 @@ streamlit
 langchain-nvidia-ai-endpoints
 langchain-ollama
 langchain-chroma
+# Document processing
+PyPDF2
+python-docx
+email-validator
+beautifulsoup4
+pdfminer.six
+pdfplumber
+# Vector database and embeddings
+faiss-cpu
+sentence-transformers
+# Additional utilities
+tiktoken
+numpy
+pandas
+scikit-learn
+# For structured outputs
+pydantic
+# For API endpoints
+fastapi
+uvicorn
+python-multipart
+# For logging and utilities
+requests
+pytesseract
+Pillow
+langchain-core
+langchain-google-genai
